@@ -1,0 +1,130 @@
+= SPEC-001: Automated System Backup & Restore
+:sectnums:
+:toc:
+
+
+== Background
+
+System backups are critical for maintaining data resilience in server operations. Manual backups are error-prone and easy to overlook,
+especially in low-cost, minimal-ops environments like personal servers or early-stage projects. This portfolio project automates the
+backup and restore process for Linux-based systems using Python and Bash. It leverages cron for scheduling, S3 for cloud storage, and
+integrates logging and email alerts to ensure observability of operations. The project aims to demonstrate proficiency in scripting,
+cloud integration, and basic DevOps practices.
+
+
+== Requirements
+
+*Must Have*
+- Daily scheduled backup of specified system folders using cron
+- Bash or Python script to compress and archive files
+- Upload of backup archive to AWS S3 bucket
+- Logging of all operations with timestamp
+- Script to restore latest backup from S3
+- Compatibility with Linux systems (Ubuntu/Debian)
+
+*Should Have*
+- Email notification on success/failure of backup
+- Command-line options for manual backup and restore
+- File rotation or retention policy (e.g., keep last 7 backups)
+
+*Could Have*
+- Encryption of backup archives
+- Web dashboard to show backup status
+
+*Won't Have*
+- Windows system support
+- GUI-based configuration
+
+
+== Method
+
+The system consists of scheduled cron jobs that invoke a series of scripts responsible for compressing directories, uploading to AWS S3,
+logging each operation, and optionally sending an email alert.
+
+[plantuml, backup_flow, svg]
+----
+@startuml
+actor "System Admin" as Admin
+node "Linux Server" {
+  component "Cron Scheduler"
+  component "Backup Script (Bash/Python)"
+  component "Log File Writer"
+  component "Email Notifier"
+}
+cloud "AWS S3" {
+  component "S3 Bucket"
+}
+Admin --> "Cron Scheduler" : Schedule Daily Job
+"Cron Scheduler" --> "Backup Script (Bash/Python)" : Execute Script
+"Backup Script (Bash/Python)" --> "Log File Writer" : Append Operation Log
+"Backup Script (Bash/Python)" --> "Email Notifier" : On Completion/Error
+"Backup Script (Bash/Python)" --> "S3 Bucket" : Upload Backup Archive
+@enduml
+----
+
+=== Folder Structure
+
+The repo follows this directory layout:
+/backup-system/
+├── backup.sh # Bash script for backup
+├── restore.sh # Bash script for restore
+├── config.env # Configuration file (folders, S3 bucket, email)
+├── logs/
+│ └── backup.log # All operations logged here
+├── test/ # Folder for testing backup process
+└── crontab.txt # Cron job definition
+
+
+=== AWS S3 Structure
+
+Backups will be stored in this format in S3:
+
+`s3://<your-bucket-name>/backups/YYYY-MM-DD_HHMM-backup.tar.gz`
+
+Retention policy will be handled via lifecycle rules in S3 (free feature).
+
+=== Logging
+
+Each run logs the following:
+- Timestamp
+- Backup success/failure
+- Archive file size
+- Duration
+- Errors (if any)
+
+Example log line:
+[2025-06-12 02:00:01] SUCCESS: backup_2025-06-12.tar.gz uploaded (120MB, 35s)
+
+
+=== Script Overview
+
+The project uses a hybrid Bash + Python scripting approach:
+
+1. **backup.sh** – Entrypoint Bash script executed by cron.
+   - Loads environment variables
+   - Calls `backup.py` and pipes output to log
+
+2. **backup.py** – Core logic:
+   - Loads folders to back up from config
+   - Compresses using `tarfile` and timestamps the archive
+   - Uploads to S3 using `boto3`
+   - Sends email summary via SMTP
+   - Returns status for logging
+
+3. **restore.py** – Restores the latest or a specific backup from S3 to the local system.
+
+4. **config.env** – Contains:
+   - Backup directories
+   - S3 bucket name
+   - Email server and credentials
+
+5. **cron job** – Configured to run `backup.sh` daily at 2am
+
+=== Example Cron Job
+
+```bash
+0 2 * * * /home/ubuntu/backup-system/backup.sh >> /home/ubuntu/backup-system/logs/backup.log 2>&1
+
+
+
+Europe (Stockholm) eu-north-1
